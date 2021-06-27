@@ -1,0 +1,14 @@
+version=0.1
+[default.global.parameters]
+stack_name = "prowe-location-sandbox"
+region = "us-east-2"
+
+[default.deploy.parameters]
+s3_bucket = "prowe-sai-sandbox-dev-deploy"
+s3_prefix = "prowe-location-sandbox"
+capabilities = "CAPABILITY_IAM"
+fail_on_empty_changeset = "false"
+parameter_overrides = [
+    "GoogleClientId=336820793242-jeg4e59lgf618gcupfb7gh3825p07hae.apps.googleusercontent.com",
+    "PlaceIndexName=prowe-place-index"
+]

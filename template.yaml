@@ -1,0 +1,45 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Parameters:
+  GoogleClientId:
+    Type: String
+  PlaceIndexName:
+    Type: String
+
+Resources:
+  PlaceIndex:
+    Type: AWS::Location::PlaceIndex
+    Properties:
+      DataSource: Esri
+      IndexName: !Ref PlaceIndexName
+      PricingPlan: RequestBasedUsage
+
+  WebRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: "accounts.google.com"
+            Action:
+              - 'sts:AssumeRoleWithWebIdentity'
+            Condition:
+              StringEquals:
+                "accounts.google.com:aud": !Ref GoogleClientId
+      Policies: 
+        - PolicyName: webuser
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - geo:SearchPlaceIndexForPosition
+                  - geo:SearchPlaceIndexForText
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:geo:${AWS::Region}:${AWS::AccountId}:place-index/${PlaceIndex}"
+
+Outputs:
+  WebRoleArn:
+    Value: !GetAtt WebRole.Arn
