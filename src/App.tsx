@@ -1,6 +1,6 @@
 import React, { Dispatch, FormEvent, useMemo, useState } from 'react';
 import { GoogleLogin, GoogleLoginResponse, GoogleLoginResponseOffline } from 'react-google-login';
-import { LocationClient, SearchPlaceIndexForTextCommand, SearchPlaceIndexForTextCommandOutput } from "@aws-sdk/client-location";
+import { LocationClient, Place, SearchPlaceIndexForTextCommand, SearchPlaceIndexForTextCommandOutput } from "@aws-sdk/client-location";
 import { getDefaultRoleAssumerWithWebIdentity } from "@aws-sdk/client-sts";
 import { fromWebToken } from "@aws-sdk/credential-provider-web-identity";
 
@@ -12,30 +12,11 @@ function getEnvVarOrDie(key: string): string {
   return value;
 }
 
-function onLoginFailed(error: any) {
-  console.error(error);
+function notEmpty<TValue>(value: TValue | null | undefined): value is TValue {
+  return value !== null && value !== undefined;
 }
 
-function ResponsePanel({response}: {response: SearchPlaceIndexForTextCommandOutput}) {
-  return (
-    <div>
-      <ul>
-        {response.Results?.map(({Place}, index) => <li key={index}>
-          <div>{Place?.AddressNumber} {Place?.Street}</div>
-          <div>{Place?.Municipality} {Place?.Region} {Place?.SubRegion} {Place?.PostalCode}</div>
-          <div>{Place?.Geometry?.Point?.join(', ')}</div>
-        </li>)}
-      </ul>
-    </div>
-  )
-}
-
-interface AddressEntryProps {
-  loginResponse: GoogleLoginResponse;
-  onSearchResponse: Dispatch<SearchPlaceIndexForTextCommandOutput>;
-}
-
-function AddressEntry({loginResponse, onSearchResponse}: AddressEntryProps) {
+function useLocationClient(loginResponse: GoogleLoginResponse) {
   const locationClient = useMemo(() => new LocationClient({
     region: 'us-east-2',
     credentials: fromWebToken({
@@ -44,6 +25,31 @@ function AddressEntry({loginResponse, onSearchResponse}: AddressEntryProps) {
       roleAssumerWithWebIdentity: getDefaultRoleAssumerWithWebIdentity(),
     })
   }), [loginResponse]);
+  return locationClient;
+}
+
+function PlaceList({places}: {places: Place[]}) {
+  return (
+    <div>
+      <ul>
+        {places.map((place, index) => <li key={index}>
+          <div>{place.Label}</div>
+          <div>{place.AddressNumber} {place.Street}</div>
+          <div>{place.Municipality} {place.Region} {place.SubRegion} {place.PostalCode}</div>
+          <div>{place.Geometry?.Point?.join(', ')}</div>
+        </li>)}
+      </ul>
+    </div>
+  )
+}
+
+interface AddressEntryProps {
+  loginResponse: GoogleLoginResponse;
+  onSearchResponse: Dispatch<Place[]>;
+}
+
+function AddressEntry({loginResponse, onSearchResponse}: AddressEntryProps) {
+  const locationClient = useLocationClient(loginResponse);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -55,7 +61,10 @@ function AddressEntry({loginResponse, onSearchResponse}: AddressEntryProps) {
         Text: address
       }));
       console.log("got response", response);
-      onSearchResponse(response);
+      const places = response?.Results
+        ?.map(r => r.Place)
+        ?.filter(notEmpty) ?? [];
+      onSearchResponse(places);
     } catch (e) {
       console.error(e);
     }
@@ -74,13 +83,17 @@ function AddressEntry({loginResponse, onSearchResponse}: AddressEntryProps) {
 
 export default function App() {
   const [loginResponse, setLoginResponse] = useState<GoogleLoginResponse>();
-  const [searchResponse, setSearchResponse] = useState<SearchPlaceIndexForTextCommandOutput>();
+  const [places, setPlaces] = useState<Place[]>([]);
 
   function onLoginSuccess(response: GoogleLoginResponse | GoogleLoginResponseOffline) {
     console.log(response);
     setLoginResponse(response as GoogleLoginResponse);
   }
-  
+
+  function onLoginFailed(error: any) {
+    console.error(error);
+  }
+
   return (
     <div>
       <GoogleLogin
@@ -90,8 +103,8 @@ export default function App() {
         onFailure={onLoginFailed}
         cookiePolicy={'single_host_origin'}
       />
-      {loginResponse && <AddressEntry loginResponse={loginResponse} onSearchResponse={setSearchResponse}/>}
-      {searchResponse && <ResponsePanel response={searchResponse} />}
+      {loginResponse && <AddressEntry loginResponse={loginResponse} onSearchResponse={setPlaces}/>}
+      <PlaceList places={places} />
     </div>
   );
 }
